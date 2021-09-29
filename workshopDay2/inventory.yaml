@@ -1,0 +1,9 @@
+all:
+  vars:
+    ansible_user: root
+    ansible_connnection: ssh
+    ansible_ssh_private_key_file: /c/Users/jian8/.docker/machine/machines/jien-docker2/id_rsa
+
+hosts:
+  myserver:
+    ansible_host: 165.22.54.214
