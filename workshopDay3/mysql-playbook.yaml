@@ -1,0 +1,100 @@
+---
+ - name: install required packages libaio1 and libtinfo5
+   hosts: webserver
+   tasks:
+    - name: install packages
+      apt:
+        update_cache: yes
+        name:
+          - unzip
+          - libaio1
+          - libtinfo5
+        state: latest
+
+ - name: create group & user call mysql
+   hosts: webserver
+   tasks:
+    - name: create group - mysql
+      group:
+        name: mysql
+        state: present
+
+    - name: create user - mysql under mysql and sudo group
+      user:
+        name: mysql
+        state: present
+        groups: [ "mysql", "sudo" ]
+        append: yes
+
+ - name: create directory /usr/local/opt, download mysql and install
+   hosts: webserver
+   vars:
+     mysql_file: mysql-8.0.26-linux-glibc2.12-x86_64
+   tasks:
+     - name: create directory
+       file:
+         path: /usr/local/opt
+         state: directory
+         owner: mysql
+         group: mysql
+         mode: 0755
+
+     - name: check file exists (optional)
+       stat:
+         path: "/usr/local/opt/mysql-8.0.26-linux-glibc2.12-x86_64.tar.xz"
+       register: file
+
+
+     - name: download mysql
+       get_url:
+         url: "https://dev.mysql.com/get/Downloads/MySQL-8.0/mysql-8.0.26-linux-glibc2.12-x86_64.tar.xz"
+         dest: "/usr/local/opt"
+         checksum: "md5:100a0e9336ef106a5fe90e6803b57066"
+       when: not file.stat.exists
+
+     - name: unzip
+       unarchive:
+         src: "/usr/local/opt/{{ mysql_file }}.tar.xz"
+         dest: "/usr/local/opt"
+         remote_src: yes
+         creates: "/usr/local/opt/{{ mysql_file }}"
+
+     - name: Change all the files under /usr/local/opt to be owned by mysql, group = mysql
+       file:
+         path: "/usr/local/opt"
+         owner: mysql
+         group: mysql
+         recurse: yes
+
+     - name: create a symlink mysql as base directory
+       file:
+         src: "/usr/local/opt/{{ mysql_file }}"
+         dest: "/usr/local/opt/mysql"
+         owner: mysql
+         group: mysql
+         state: link
+
+     - name: create symbolic link to /usr/local/bin for mysql execution command
+       file:
+         src: "/usr/local/opt/{{ mysql_file }}/bin/mysql"
+         dest: "/usr/local/bin/mysql"
+         state: link
+
+     - name: generate my.cnf in /etc/my.cnf using jinja template
+       template:
+         src: /root/ansible-workspace/mySqlTemplate.j2
+         dest: /etc/my.cnf
+
+     - name: Initialize MySQL
+       command:
+         chdir: "/usr/local/opt/mysql"
+         argv:
+         - "bin/mysqld"
+         - --initialize
+         - --user=mysql
+         creates: /var/lib/mysql
+       register: result
+
+     - name: mysql msg
+       debug:
+         msg: "{{ result['stdout_lines'] }}"
